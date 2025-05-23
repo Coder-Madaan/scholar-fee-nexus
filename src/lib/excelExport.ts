@@ -14,7 +14,7 @@ export const exportToExcel = {
         'Parent Name': student.parent_name,
         'Parent Phone': student.parent_phone,
         'Address': student.address,
-        'Admission Date': new Date(student.created_at).toLocaleDateString()
+        'Date of Birth': new Date(student.date_of_birth).toLocaleDateString()
       }))
     )
     

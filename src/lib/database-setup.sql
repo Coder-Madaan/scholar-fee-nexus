@@ -1,4 +1,3 @@
-
 -- Create students table
 CREATE TABLE students (
   id SERIAL PRIMARY KEY,
@@ -10,6 +9,7 @@ CREATE TABLE students (
   parent_name VARCHAR(255) NOT NULL,
   parent_phone VARCHAR(20) NOT NULL,
   address TEXT NOT NULL,
+  date_of_birth DATE NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

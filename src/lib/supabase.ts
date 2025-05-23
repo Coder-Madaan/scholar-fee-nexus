@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
@@ -17,6 +16,7 @@ export interface Student {
   parent_name: string
   parent_phone: string
   address: string
+  date_of_birth: string
   created_at: string
 }
 
@@ -156,6 +156,27 @@ export const paymentOperations = {
     
     if (error) throw error
     return data
+  },
+
+  async update(id: number, payment: Partial<Payment>) {
+    const { data, error } = await supabase
+      .from('payments')
+      .update(payment)
+      .eq('id', id)
+      .select()
+      .single()
+    
+    if (error) throw error
+    return data
+  },
+
+  async delete(id: number) {
+    const { error } = await supabase
+      .from('payments')
+      .delete()
+      .eq('id', id)
+    
+    if (error) throw error
   },
 
   async getByStudent(studentId: number) {

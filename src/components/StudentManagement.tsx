@@ -28,7 +28,8 @@ const StudentManagement = () => {
     roll_number: '',
     parent_name: '',
     parent_phone: '',
-    address: ''
+    address: '',
+    date_of_birth: ''
   });
 
   const classes = ['Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10', 'Class 11', 'Class 12'];
@@ -99,7 +100,8 @@ const StudentManagement = () => {
       roll_number: student.roll_number,
       parent_name: student.parent_name,
       parent_phone: student.parent_phone,
-      address: student.address
+      address: student.address,
+      date_of_birth: student.date_of_birth
     });
     setIsEditDialogOpen(true);
   };
@@ -202,18 +204,30 @@ const StudentManagement = () => {
         </div>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="class">Class</Label>
-        <Select value={formData.class} onValueChange={(value) => handleInputChange('class', value)}>
-          <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
-            <SelectValue placeholder="Select Class" />
-          </SelectTrigger>
-          <SelectContent className="bg-gray-700 border-gray-600">
-            {classes.map(cls => (
-              <SelectItem key={cls} value={cls} className="text-white">{cls}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="class">Class</Label>
+          <Select value={formData.class} onValueChange={(value) => handleInputChange('class', value)}>
+            <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+              <SelectValue placeholder="Select Class" />
+            </SelectTrigger>
+            <SelectContent className="bg-gray-700 border-gray-600">
+              {classes.map(cls => (
+                <SelectItem key={cls} value={cls} className="text-white">{cls}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="dateOfBirth">Date of Birth</Label>
+          <Input
+            id="dateOfBirth"
+            type="date"
+            value={formData.date_of_birth}
+            onChange={(e) => handleInputChange('date_of_birth', e.target.value)}
+            className="bg-gray-700 border-gray-600 text-white"
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -312,6 +326,7 @@ const StudentManagement = () => {
                   <TableHead className="text-gray-300">Email</TableHead>
                   <TableHead className="text-gray-300">Phone</TableHead>
                   <TableHead className="text-gray-300">Parent</TableHead>
+                  <TableHead className="text-gray-300">DOB</TableHead>
                   <TableHead className="text-gray-300">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -324,6 +339,7 @@ const StudentManagement = () => {
                     <TableCell className="text-white">{student.email}</TableCell>
                     <TableCell className="text-white">{student.phone}</TableCell>
                     <TableCell className="text-white">{student.parent_name}</TableCell>
+                    <TableCell className="text-white">{new Date(student.date_of_birth).toLocaleDateString()}</TableCell>
                     <TableCell>
                       <div className="flex space-x-2">
                         <Button 
