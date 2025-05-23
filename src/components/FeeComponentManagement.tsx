@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,16 +8,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Plus, Edit, Trash } from 'lucide-react';
+import { feeComponentOperations, FeeComponent } from '@/lib/supabase';
+import { useToast } from '@/hooks/use-toast';
 
 const FeeComponentManagement = () => {
-  const [feeComponents, setFeeComponents] = useState([
-    { id: 1, name: 'Tuition Fee', class: 'Class 10', amount: 15000, description: 'Monthly tuition fee' },
-    { id: 2, name: 'Transport Fee', class: 'Class 10', amount: 2000, description: 'Monthly transport fee' },
-    { id: 3, name: 'Lab Fee', class: 'Class 10', amount: 1500, description: 'Laboratory fee' },
-    { id: 4, name: 'Library Fee', class: 'Class 10', amount: 500, description: 'Library maintenance fee' }
-  ]);
-
+  const [feeComponents, setFeeComponents] = useState<FeeComponent[]>([]);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingComponent, setEditingComponent] = useState<FeeComponent | null>(null);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
+
   const [formData, setFormData] = useState({
     name: '',
     class: '',
@@ -27,26 +28,179 @@ const FeeComponentManagement = () => {
 
   const classes = ['Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10', 'Class 11', 'Class 12'];
 
+  useEffect(() => {
+    loadFeeComponents();
+  }, []);
+
+  const loadFeeComponents = async () => {
+    try {
+      setLoading(true);
+      const data = await feeComponentOperations.getAll();
+      setFeeComponents(data || []);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to load fee components",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleAddFeeComponent = () => {
-    const newComponent = {
-      id: feeComponents.length + 1,
-      name: formData.name,
-      class: formData.class,
-      amount: parseInt(formData.amount),
-      description: formData.description
-    };
-    setFeeComponents(prev => [...prev, newComponent]);
+  const resetForm = () => {
     setFormData({ name: '', class: '', amount: '', description: '' });
-    setIsAddDialogOpen(false);
   };
 
-  const handleDelete = (id: number) => {
-    setFeeComponents(prev => prev.filter(component => component.id !== id));
+  const handleAddFeeComponent = async () => {
+    try {
+      await feeComponentOperations.create({
+        ...formData,
+        amount: parseInt(formData.amount)
+      });
+      await loadFeeComponents();
+      resetForm();
+      setIsAddDialogOpen(false);
+      toast({
+        title: "Success",
+        description: "Fee component added successfully"
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to add fee component",
+        variant: "destructive"
+      });
+    }
   };
+
+  const handleEditComponent = (component: FeeComponent) => {
+    setEditingComponent(component);
+    setFormData({
+      name: component.name,
+      class: component.class,
+      amount: component.amount.toString(),
+      description: component.description
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleUpdateComponent = async () => {
+    if (!editingComponent) return;
+    
+    try {
+      await feeComponentOperations.update(editingComponent.id, {
+        ...formData,
+        amount: parseInt(formData.amount)
+      });
+      await loadFeeComponents();
+      resetForm();
+      setIsEditDialogOpen(false);
+      setEditingComponent(null);
+      toast({
+        title: "Success",
+        description: "Fee component updated successfully"
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update fee component",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this fee component?')) return;
+    
+    try {
+      await feeComponentOperations.delete(id);
+      await loadFeeComponents();
+      toast({
+        title: "Success",
+        description: "Fee component deleted successfully"
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete fee component",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const ComponentForm = ({ onSubmit, submitText }: { onSubmit: () => void, submitText: string }) => (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="componentName">Component Name</Label>
+        <Input
+          id="componentName"
+          value={formData.name}
+          onChange={(e) => handleInputChange('name', e.target.value)}
+          placeholder="e.g., Tuition Fee, Transport Fee"
+          className="bg-gray-700 border-gray-600 text-white"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="class">Class</Label>
+        <Select value={formData.class} onValueChange={(value) => handleInputChange('class', value)}>
+          <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+            <SelectValue placeholder="Select Class" />
+          </SelectTrigger>
+          <SelectContent className="bg-gray-700 border-gray-600">
+            {classes.map(cls => (
+              <SelectItem key={cls} value={cls} className="text-white">{cls}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="amount">Amount (₹)</Label>
+        <Input
+          id="amount"
+          type="number"
+          value={formData.amount}
+          onChange={(e) => handleInputChange('amount', e.target.value)}
+          placeholder="Enter amount"
+          className="bg-gray-700 border-gray-600 text-white"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="description">Description</Label>
+        <Input
+          id="description"
+          value={formData.description}
+          onChange={(e) => handleInputChange('description', e.target.value)}
+          placeholder="Brief description"
+          className="bg-gray-700 border-gray-600 text-white"
+        />
+      </div>
+      <div className="flex justify-end space-x-2 mt-6">
+        <Button variant="outline" onClick={() => {
+          setIsAddDialogOpen(false);
+          setIsEditDialogOpen(false);
+          resetForm();
+        }} className="border-gray-600 text-gray-300">
+          Cancel
+        </Button>
+        <Button onClick={onSubmit} className="bg-blue-600 hover:bg-blue-700">
+          {submitText}
+        </Button>
+      </div>
+    </div>
+  );
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="text-white">Loading fee components...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -65,60 +219,7 @@ const FeeComponentManagement = () => {
                 <DialogHeader>
                   <DialogTitle>Add New Fee Component</DialogTitle>
                 </DialogHeader>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="componentName">Component Name</Label>
-                    <Input
-                      id="componentName"
-                      value={formData.name}
-                      onChange={(e) => handleInputChange('name', e.target.value)}
-                      placeholder="e.g., Tuition Fee, Transport Fee"
-                      className="bg-gray-700 border-gray-600 text-white"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="class">Class</Label>
-                    <Select value={formData.class} onValueChange={(value) => handleInputChange('class', value)}>
-                      <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
-                        <SelectValue placeholder="Select Class" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-gray-700 border-gray-600">
-                        {classes.map(cls => (
-                          <SelectItem key={cls} value={cls} className="text-white">{cls}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="amount">Amount (₹)</Label>
-                    <Input
-                      id="amount"
-                      type="number"
-                      value={formData.amount}
-                      onChange={(e) => handleInputChange('amount', e.target.value)}
-                      placeholder="Enter amount"
-                      className="bg-gray-700 border-gray-600 text-white"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="description">Description</Label>
-                    <Input
-                      id="description"
-                      value={formData.description}
-                      onChange={(e) => handleInputChange('description', e.target.value)}
-                      placeholder="Brief description"
-                      className="bg-gray-700 border-gray-600 text-white"
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-end space-x-2 mt-6">
-                  <Button variant="outline" onClick={() => setIsAddDialogOpen(false)} className="border-gray-600 text-gray-300">
-                    Cancel
-                  </Button>
-                  <Button onClick={handleAddFeeComponent} className="bg-blue-600 hover:bg-blue-700">
-                    Add Component
-                  </Button>
-                </div>
+                <ComponentForm onSubmit={handleAddFeeComponent} submitText="Add Component" />
               </DialogContent>
             </Dialog>
           </div>
@@ -144,7 +245,12 @@ const FeeComponentManagement = () => {
                     <TableCell className="text-white">{component.description}</TableCell>
                     <TableCell>
                       <div className="flex space-x-2">
-                        <Button size="sm" variant="outline" className="border-gray-600 text-gray-300">
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="border-gray-600 text-gray-300"
+                          onClick={() => handleEditComponent(component)}
+                        >
                           <Edit className="w-4 h-4" />
                         </Button>
                         <Button 
@@ -164,6 +270,16 @@ const FeeComponentManagement = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Edit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="bg-gray-800 border-gray-700 text-white">
+          <DialogHeader>
+            <DialogTitle>Edit Fee Component</DialogTitle>
+          </DialogHeader>
+          <ComponentForm onSubmit={handleUpdateComponent} submitText="Update Component" />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
