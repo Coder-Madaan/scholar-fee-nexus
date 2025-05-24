@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 
+const PROJECT_NAME = "School Fees Management";
+
 const Auth = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -22,7 +24,11 @@ const Auth = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
       if (mode === "login") {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) {
-          setError(error.message);
+          if (error.message.includes("Email not confirmed")) {
+            setError("Email not confirmed. Please check your inbox and confirm your email before logging in.");
+          } else {
+            setError(error.message);
+          }
         } else {
           onAuthSuccess();
         }
@@ -32,7 +38,7 @@ const Auth = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
           setError(error.message);
         } else {
           setMode("login");
-          setError("Signup successful! Please login.");
+          setError("Signup successful! Please check your email to confirm and then login.");
         }
       }
     } finally {
@@ -41,7 +47,18 @@ const Auth = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-900">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900">
+      {/* Project header */}
+      <header className="flex items-center gap-3 py-8">
+        <img
+          src="/favicon.ico"
+          alt="Logo"
+          className="h-10 w-10 rounded shadow"
+        />
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white select-none">
+          {PROJECT_NAME}
+        </h1>
+      </header>
       <Card className="w-full max-w-xs border-gray-800 bg-gray-800">
         <CardHeader>
           <CardTitle className="text-white">{mode === "login" ? "Login" : "Sign Up"}</CardTitle>
@@ -58,6 +75,7 @@ const Auth = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 disabled={loading}
+                autoComplete="username"
               />
             </div>
             <div className="space-y-1">
@@ -70,6 +88,7 @@ const Auth = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 disabled={loading}
+                autoComplete={mode === "login" ? "current-password" : "new-password"}
               />
             </div>
             {error && (
@@ -99,3 +118,4 @@ const Auth = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
 };
 
 export default Auth;
+
