@@ -10,7 +10,6 @@ import { Plus, Download, Receipt, Edit, Trash } from 'lucide-react';
 import { studentOperations, feeComponentOperations, paymentOperations, Student, FeeComponent } from '@/lib/supabase';
 import { exportToExcel } from '@/lib/excelExport';
 import { useToast } from '@/hooks/use-toast';
-import { useMediaQuery } from "react-responsive";
 
 const PaymentTracking = () => {
   const [payments, setPayments] = useState<any[]>([]);
@@ -24,27 +23,36 @@ const PaymentTracking = () => {
 
   const [searchTerm, setSearchTerm] = useState(""); // For searching students
   const [selectAllComponents, setSelectAllComponents] = useState(false); // Select all fee components
+
+  // FIX: Always have all fields in formData object
+  const currentYear = new Date().getFullYear();
   const [formData, setFormData] = useState({
     student_id: "",
     fee_component_id: "",
     amount: "",
     payment_method: "cash" as "cash" | "cheque" | "upi" | "bank_transfer",
     payment_date: new Date().toISOString().split("T")[0],
-    academic_year: "2024-25",
+    academic_year: `${currentYear}-${(currentYear + 1).toString().slice(-2)}`,
     receipt_number: "",
     transaction_ref: "",
   });
 
-  const currentYear = new Date().getFullYear();
   const academicYears = [
     `${currentYear}-${(currentYear + 1).toString().slice(-2)}`,
     `${currentYear - 1}-${currentYear.toString().slice(-2)}`,
     `${currentYear - 2}-${(currentYear - 1).toString().slice(-2)}`,
   ];
 
-  const isMobile = typeof window !== "undefined"
-    ? window.innerWidth < 640
-    : false;
+  // Responsive detection (vanilla JS, avoid react-responsive)
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    function handleResize() {
+      setIsMobile(window.innerWidth < 640);
+    }
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   useEffect(() => {
     loadData();
@@ -97,18 +105,25 @@ const PaymentTracking = () => {
   // --- NEW: When Select All is checked ---
   useEffect(() => {
     if (selectAllComponents) {
-      // If select all, set fee_component_id to comma separated ids
       setFormData((prev) => ({
         ...prev,
         fee_component_id: studentComponents.map((fc) => fc.id).join(","),
         amount: studentComponents.reduce((sum, fc) => sum + fc.amount, 0).toString(),
+        // transaction_ref must always exist
+        transaction_ref: prev.transaction_ref ?? "",
       }));
     }
     // eslint-disable-next-line
   }, [selectAllComponents, formData.student_id, JSON.stringify(studentComponents)]);
 
   const handleInputChange = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({
+      ...prev,
+      [field]: value,
+      // Always include transaction_ref, avoid undefined in formData
+      ...(field !== "transaction_ref" && { transaction_ref: prev.transaction_ref ?? "" })
+    }));
+    // Reset select-all when student is changed
     if (field === "student_id") {
       setSelectAllComponents(false);
     }
@@ -137,7 +152,6 @@ const PaymentTracking = () => {
       const receiptNumber = generateReceiptNumber();
       let componentIds: string[] = [];
       if (formData.fee_component_id && formData.fee_component_id.includes(",")) {
-        // Split multiple for select all
         componentIds = formData.fee_component_id.split(",");
       } else {
         componentIds = [formData.fee_component_id];
@@ -148,8 +162,7 @@ const PaymentTracking = () => {
             ...formData,
             student_id: parseInt(formData.student_id),
             fee_component_id: componentId ? parseInt(componentId) : null,
-            amount: parseInt(formData.amount) /
-              (componentIds.length || 1), // split amount
+            amount: Math.round(parseInt(formData.amount) / (componentIds.length || 1)),
             receipt_number: receiptNumber,
             transaction_ref:
               formData.payment_method !== "cash" ? formData.transaction_ref : "",
@@ -175,13 +188,14 @@ const PaymentTracking = () => {
   const handleEditPayment = (payment: any) => {
     setEditingPayment(payment);
     setFormData({
-      student_id: payment.student_id.toString(),
-      fee_component_id: payment.fee_component_id.toString(),
-      amount: payment.amount.toString(),
-      payment_method: payment.payment_method,
-      payment_date: payment.payment_date,
-      academic_year: payment.academic_year,
-      receipt_number: payment.receipt_number
+      student_id: payment.student_id?.toString() ?? "",
+      fee_component_id: payment.fee_component_id?.toString() ?? "",
+      amount: payment.amount?.toString() ?? "",
+      payment_method: payment.payment_method || "cash",
+      payment_date: payment.payment_date || new Date().toISOString().split("T")[0],
+      academic_year: payment.academic_year || `${currentYear}-${(currentYear + 1).toString().slice(-2)}`,
+      receipt_number: payment.receipt_number || "",
+      transaction_ref: payment.transaction_ref || "",
     });
     setIsEditDialogOpen(true);
   };
