@@ -149,23 +149,70 @@ const PaymentTracking = () => {
   // --- Updated Payment creation for SelectAll ---
   const handleAddPayment = async () => {
     try {
-      const receiptNumber = generateReceiptNumber();
+      // Validate numeric IDs, amount
+      const studentIdNum = parseInt(formData.student_id);
+      if (!studentIdNum || isNaN(studentIdNum)) {
+        toast({
+          title: "Error",
+          description: "Please select a valid student",
+          variant: "destructive"
+        });
+        return;
+      }
       let componentIds: string[] = [];
       if (formData.fee_component_id && formData.fee_component_id.includes(",")) {
         componentIds = formData.fee_component_id.split(",");
       } else {
         componentIds = [formData.fee_component_id];
       }
+      if (!componentIds.length || !componentIds[0]) {
+        toast({
+          title: "Error",
+          description: "Please select a valid fee component",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const totalAmount = parseInt(formData.amount);
+      if (!totalAmount || isNaN(totalAmount) || totalAmount <= 0) {
+        toast({
+          title: "Error",
+          description: "Please enter a valid amount",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Only set transaction_ref if payment_method !== cash
+      const paymentMethod = formData.payment_method;
+      const needsRef = paymentMethod !== "cash";
+      const transactionRefField = needsRef ? formData.transaction_ref?.trim() : "";
+
+      if (needsRef && !transactionRefField) {
+        toast({
+          title: "Error",
+          description: `Please enter a ${paymentMethod === "cheque" ? "cheque number" : "transaction/UTR number"}`,
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const amountPerComponent = Math.round(totalAmount / (componentIds.length || 1));
+      const receiptNumber = generateReceiptNumber();
+
+      // Only use strictly the fields needed by DB
       await Promise.all(
         componentIds.map((componentId) =>
           paymentOperations.create({
-            ...formData,
-            student_id: parseInt(formData.student_id),
+            student_id: studentIdNum,
             fee_component_id: componentId ? parseInt(componentId) : null,
-            amount: Math.round(parseInt(formData.amount) / (componentIds.length || 1)),
+            amount: amountPerComponent,
+            payment_method: paymentMethod,
+            payment_date: formData.payment_date,
+            academic_year: formData.academic_year,
             receipt_number: receiptNumber,
-            transaction_ref:
-              formData.payment_method !== "cash" ? formData.transaction_ref : "",
+            transaction_ref: needsRef ? transactionRefField : "",
           })
         )
       );
@@ -179,9 +226,11 @@ const PaymentTracking = () => {
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to record payment",
-        variant: "destructive",
+        description: "Failed to record payment. Please check the details or contact admin.",
+        variant: "destructive"
       });
+      // Optional: log details for debug
+      console.error(error);
     }
   };
 
@@ -429,27 +478,31 @@ const PaymentTracking = () => {
     );
   }
 
+  // Responsive Payment Table (add overflow and stacking)
   return (
-    <div className="space-y-6">
-      <Card className="bg-gray-800 border-gray-700">
+    <div className="space-y-6 px-2 py-2 sm:px-4 md:px-8">
+      <Card className="bg-gray-800 border-gray-700 w-full">
         <CardHeader>
-          <div className="flex justify-between items-center">
-            <CardTitle className="text-white">Payment Tracking</CardTitle>
-            <div className="flex space-x-2">
-              <Button onClick={handleExportPayments} className="bg-green-600 hover:bg-green-700">
-                <Download className="w-4 h-4 mr-2" />
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+            <CardTitle className="text-white text-xl sm:text-2xl">Payment Tracking</CardTitle>
+            <div className="flex space-x-2 w-full sm:w-auto">
+              <Button
+                onClick={handleExportPayments}
+                className="bg-green-600 px-2 py-1 min-w-28 text-xs sm:text-base hover:bg-green-700 whitespace-nowrap"
+              >
+                <Download className="w-4 h-4 mr-1" />
                 Export Report
               </Button>
               <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button className="bg-blue-600 hover:bg-blue-700">
-                    <Plus className="w-4 h-4 mr-2" />
+                  <Button className="bg-blue-600 px-2 py-1 min-w-32 text-xs sm:text-base hover:bg-blue-700 whitespace-nowrap">
+                    <Plus className="w-4 h-4 mr-1" />
                     Record Payment
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="bg-gray-800 border-gray-700 text-white max-w-lg">
+                <DialogContent className="bg-gray-800 border-gray-700 text-white w-[95vw] max-w-md p-2 sm:p-8 rounded-lg">
                   <DialogHeader>
-                    <DialogTitle>Record New Payment</DialogTitle>
+                    <DialogTitle className="text-lg sm:text-xl">Record New Payment</DialogTitle>
                   </DialogHeader>
                   <PaymentForm onSubmit={handleAddPayment} submitText="Record Payment" />
                 </DialogContent>
@@ -458,24 +511,24 @@ const PaymentTracking = () => {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border border-gray-700">
+          <div className="overflow-x-auto rounded-md border border-gray-700">
             <Table>
               <TableHeader>
-                <TableRow className="border-gray-700">
-                  <TableHead className="text-gray-300">Receipt No.</TableHead>
-                  <TableHead className="text-gray-300">Student</TableHead>
-                  <TableHead className="text-gray-300">Class</TableHead>
-                  <TableHead className="text-gray-300">Fee Component</TableHead>
-                  <TableHead className="text-gray-300">Amount</TableHead>
-                  <TableHead className="text-gray-300">Method</TableHead>
-                  <TableHead className="text-gray-300">Date</TableHead>
-                  <TableHead className="text-gray-300">Year</TableHead>
-                  <TableHead className="text-gray-300">Actions</TableHead>
+                <TableRow className="border-gray-700 whitespace-nowrap">
+                  <TableHead className="text-gray-300 text-xs sm:text-sm">Receipt No.</TableHead>
+                  <TableHead className="text-gray-300 text-xs sm:text-sm">Student</TableHead>
+                  <TableHead className="text-gray-300 text-xs sm:text-sm">Class</TableHead>
+                  <TableHead className="text-gray-300 text-xs sm:text-sm">Fee Component</TableHead>
+                  <TableHead className="text-gray-300 text-xs sm:text-sm">Amount</TableHead>
+                  <TableHead className="text-gray-300 text-xs sm:text-sm">Method</TableHead>
+                  <TableHead className="text-gray-300 text-xs sm:text-sm">Date</TableHead>
+                  <TableHead className="text-gray-300 text-xs sm:text-sm">Year</TableHead>
+                  <TableHead className="text-gray-300 text-xs sm:text-sm">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {payments.map((payment) => (
-                  <TableRow key={payment.id} className="border-gray-700">
+                  <TableRow key={payment.id} className="border-gray-700 text-xs sm:text-sm">
                     <TableCell className="text-white font-medium">
                       <div className="flex items-center">
                         <Receipt className="w-4 h-4 mr-2 text-green-400" />
@@ -490,18 +543,18 @@ const PaymentTracking = () => {
                     <TableCell className="text-white">{new Date(payment.payment_date).toLocaleDateString()}</TableCell>
                     <TableCell className="text-white">{payment.academic_year}</TableCell>
                     <TableCell>
-                      <div className="flex space-x-2">
-                        <Button 
-                          size="sm" 
-                          variant="outline" 
+                      <div className="flex flex-row space-x-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
                           className="border-gray-600 text-gray-300"
                           onClick={() => handleEditPayment(payment)}
                         >
                           <Edit className="w-4 h-4" />
                         </Button>
-                        <Button 
-                          size="sm" 
-                          variant="outline" 
+                        <Button
+                          size="sm"
+                          variant="outline"
                           className="border-red-600 text-red-400"
                           onClick={() => handleDeletePayment(payment.id)}
                         >
@@ -516,12 +569,11 @@ const PaymentTracking = () => {
           </div>
         </CardContent>
       </Card>
-
-      {/* Edit Dialog */}
+      {/* Edit Dialog (same width/padding as above) */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="bg-gray-800 border-gray-700 text-white max-w-lg">
+        <DialogContent className="bg-gray-800 border-gray-700 text-white w-[95vw] max-w-md p-2 sm:p-8 rounded-lg">
           <DialogHeader>
-            <DialogTitle>Edit Payment</DialogTitle>
+            <DialogTitle className="text-lg sm:text-xl">Edit Payment</DialogTitle>
           </DialogHeader>
           <PaymentForm onSubmit={handleUpdatePayment} submitText="Update Payment" />
         </DialogContent>
