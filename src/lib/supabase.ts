@@ -32,12 +32,13 @@ export interface FeeComponent {
 export interface Payment {
   id: number
   student_id: number
-  fee_component_id: number
+  fee_component_id: number | null
   amount: number
   payment_method: 'cash' | 'cheque' | 'upi' | 'bank_transfer'
   payment_date: string
   academic_year: string
   receipt_number: string
+  transaction_ref?: string | null // Cheque or UTR ref
   created_at: string
 }
 

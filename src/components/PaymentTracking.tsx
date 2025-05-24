@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,6 +10,7 @@ import { Plus, Download, Receipt, Edit, Trash } from 'lucide-react';
 import { studentOperations, feeComponentOperations, paymentOperations, Student, FeeComponent } from '@/lib/supabase';
 import { exportToExcel } from '@/lib/excelExport';
 import { useToast } from '@/hooks/use-toast';
+import { useMediaQuery } from "react-responsive";
 
 const PaymentTracking = () => {
   const [payments, setPayments] = useState<any[]>([]);
@@ -22,14 +22,17 @@ const PaymentTracking = () => {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
+  const [searchTerm, setSearchTerm] = useState(""); // For searching students
+  const [selectAllComponents, setSelectAllComponents] = useState(false); // Select all fee components
   const [formData, setFormData] = useState({
-    student_id: '',
-    fee_component_id: '',
-    amount: '',
-    payment_method: 'cash' as 'cash' | 'cheque' | 'upi' | 'bank_transfer',
-    payment_date: new Date().toISOString().split('T')[0],
-    academic_year: '2024-25',
-    receipt_number: ''
+    student_id: "",
+    fee_component_id: "",
+    amount: "",
+    payment_method: "cash" as "cash" | "cheque" | "upi" | "bank_transfer",
+    payment_date: new Date().toISOString().split("T")[0],
+    academic_year: "2024-25",
+    receipt_number: "",
+    transaction_ref: "",
   });
 
   const currentYear = new Date().getFullYear();
@@ -38,6 +41,10 @@ const PaymentTracking = () => {
     `${currentYear - 1}-${currentYear.toString().slice(-2)}`,
     `${currentYear - 2}-${(currentYear - 1).toString().slice(-2)}`,
   ];
+
+  const isMobile = typeof window !== "undefined"
+    ? window.innerWidth < 640
+    : false;
 
   useEffect(() => {
     loadData();
@@ -71,45 +78,96 @@ const PaymentTracking = () => {
     return `REC${timestamp}`;
   };
 
+  // --- SEARCH: Filtered student list by search term ---
+  const filteredStudents = searchTerm
+    ? students.filter((s) =>
+        s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        s.roll_number.toLowerCase().includes(searchTerm.toLowerCase())
+      )
+    : students;
+
+  // --- NEW: Get all fee components for selected student ---
+  const studentClass =
+    students.find((s) => s.id === parseInt(formData.student_id))?.class || "";
+
+  const studentComponents = feeComponents.filter(
+    (fc) => fc.class === studentClass
+  );
+
+  // --- NEW: When Select All is checked ---
+  useEffect(() => {
+    if (selectAllComponents) {
+      // If select all, set fee_component_id to comma separated ids
+      setFormData((prev) => ({
+        ...prev,
+        fee_component_id: studentComponents.map((fc) => fc.id).join(","),
+        amount: studentComponents.reduce((sum, fc) => sum + fc.amount, 0).toString(),
+      }));
+    }
+    // eslint-disable-next-line
+  }, [selectAllComponents, formData.student_id, JSON.stringify(studentComponents)]);
+
   const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    if (field === "student_id") {
+      setSelectAllComponents(false);
+    }
   };
+
+  // Fix input freezing: All form fields derive value from formData now.
 
   const resetForm = () => {
     setFormData({
-      student_id: '',
-      fee_component_id: '',
-      amount: '',
-      payment_method: 'cash',
-      payment_date: new Date().toISOString().split('T')[0],
+      student_id: "",
+      fee_component_id: "",
+      amount: "",
+      payment_method: "cash",
+      payment_date: new Date().toISOString().split("T")[0],
       academic_year: `${currentYear}-${(currentYear + 1).toString().slice(-2)}`,
-      receipt_number: ''
+      receipt_number: "",
+      transaction_ref: "",
     });
+    setSearchTerm("");
+    setSelectAllComponents(false);
   };
 
+  // --- Updated Payment creation for SelectAll ---
   const handleAddPayment = async () => {
     try {
       const receiptNumber = generateReceiptNumber();
-      await paymentOperations.create({
-        ...formData,
-        student_id: parseInt(formData.student_id),
-        fee_component_id: parseInt(formData.fee_component_id),
-        amount: parseInt(formData.amount),
-        receipt_number: receiptNumber
-      });
-      
+      let componentIds: string[] = [];
+      if (formData.fee_component_id && formData.fee_component_id.includes(",")) {
+        // Split multiple for select all
+        componentIds = formData.fee_component_id.split(",");
+      } else {
+        componentIds = [formData.fee_component_id];
+      }
+      await Promise.all(
+        componentIds.map((componentId) =>
+          paymentOperations.create({
+            ...formData,
+            student_id: parseInt(formData.student_id),
+            fee_component_id: componentId ? parseInt(componentId) : null,
+            amount: parseInt(formData.amount) /
+              (componentIds.length || 1), // split amount
+            receipt_number: receiptNumber,
+            transaction_ref:
+              formData.payment_method !== "cash" ? formData.transaction_ref : "",
+          })
+        )
+      );
       await loadData();
       resetForm();
       setIsAddDialogOpen(false);
       toast({
         title: "Success",
-        description: `Payment recorded successfully. Receipt: ${receiptNumber}`
+        description: `Payment recorded successfully. Receipt: ${receiptNumber}`,
       });
     } catch (error) {
       toast({
         title: "Error",
         description: "Failed to record payment",
-        variant: "destructive"
+        variant: "destructive",
       });
     }
   };
@@ -128,6 +186,7 @@ const PaymentTracking = () => {
     setIsEditDialogOpen(true);
   };
 
+  // --- Updated Payment update for SelectAll/TransactionRef ---
   const handleUpdatePayment = async () => {
     if (!editingPayment) return;
     
@@ -135,8 +194,12 @@ const PaymentTracking = () => {
       await paymentOperations.update(editingPayment.id, {
         ...formData,
         student_id: parseInt(formData.student_id),
-        fee_component_id: parseInt(formData.fee_component_id),
-        amount: parseInt(formData.amount)
+        fee_component_id: formData.fee_component_id
+          ? parseInt(formData.fee_component_id)
+          : null,
+        amount: parseInt(formData.amount),
+        transaction_ref:
+          formData.payment_method !== "cash" ? formData.transaction_ref : "",
       });
       
       await loadData();
@@ -183,28 +246,24 @@ const PaymentTracking = () => {
     });
   };
 
-  const getStudentFeeComponents = () => {
-    if (!formData.student_id) return [];
-    const student = students.find(s => s.id === parseInt(formData.student_id));
-    if (!student) return [];
-    return feeComponents.filter(fc => fc.class === student.class);
-  };
-
-  const selectedComponent = feeComponents.find(fc => fc.id === parseInt(formData.fee_component_id));
-
   const PaymentForm = ({ onSubmit, submitText }: { onSubmit: () => void, submitText: string }) => (
-    <div className="space-y-4">
+    <div className={`space-y-4 ${isMobile ? "p-2" : ""}`}>
+      {/* Student Search & Select */}
       <div className="space-y-2">
         <Label htmlFor="student">Student</Label>
-        <Select value={formData.student_id} onValueChange={(value) => {
-          handleInputChange('student_id', value);
-          handleInputChange('fee_component_id', '');
-        }}>
+        <Input
+          id="searchStudent"
+          placeholder="Search student name or roll no."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="bg-gray-700 border-gray-600 text-white"
+        />
+        <Select value={formData.student_id} onValueChange={(value) => handleInputChange("student_id", value)}>
           <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
             <SelectValue placeholder="Select Student" />
           </SelectTrigger>
           <SelectContent className="bg-gray-700 border-gray-600">
-            {students.map(student => (
+            {filteredStudents.map((student) => (
               <SelectItem key={student.id} value={student.id.toString()} className="text-white">
                 {student.name} ({student.class} - {student.roll_number})
               </SelectItem>
@@ -213,20 +272,38 @@ const PaymentTracking = () => {
         </Select>
       </div>
 
-      <div className="space-y-2">
+      {/* Fee Component (Select All Option) */}
+      <div className={`${isMobile ? "flex flex-col gap-1" : "space-y-2"} relative`}>
         <Label htmlFor="feeComponent">Fee Component</Label>
-        <Select value={formData.fee_component_id} onValueChange={(value) => {
-          handleInputChange('fee_component_id', value);
-          const component = feeComponents.find(fc => fc.id === parseInt(value));
-          if (component) {
-            handleInputChange('amount', component.amount.toString());
-          }
-        }}>
+        <div className="flex items-center space-x-2 mb-1 flex-wrap">
+          <input
+            type="checkbox"
+            id="selectAllComponents"
+            checked={selectAllComponents}
+            onChange={(e) => setSelectAllComponents(e.target.checked)}
+            className="accent-blue-600"
+          />
+          <Label htmlFor="selectAllComponents" className="text-sm text-blue-300 font-normal cursor-pointer">
+            Select All Fee Components for this class
+          </Label>
+        </div>
+        <Select
+          value={formData.fee_component_id}
+          onValueChange={(value) => {
+            setSelectAllComponents(false);
+            handleInputChange("fee_component_id", value);
+            const component = feeComponents.find((fc) => fc.id === parseInt(value));
+            if (component) {
+              handleInputChange("amount", component.amount.toString());
+            }
+          }}
+          disabled={selectAllComponents}
+        >
           <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
             <SelectValue placeholder="Select Fee Component" />
           </SelectTrigger>
           <SelectContent className="bg-gray-700 border-gray-600">
-            {getStudentFeeComponents().map(component => (
+            {studentComponents.map((component) => (
               <SelectItem key={component.id} value={component.id.toString()} className="text-white">
                 {component.name} - ₹{component.amount}
               </SelectItem>
@@ -235,26 +312,23 @@ const PaymentTracking = () => {
         </Select>
       </div>
 
+      {/* Amount */}
       <div className="space-y-2">
         <Label htmlFor="amount">Amount (₹)</Label>
         <Input
           id="amount"
           type="number"
           value={formData.amount}
-          onChange={(e) => handleInputChange('amount', e.target.value)}
+          onChange={(e) => handleInputChange("amount", e.target.value)}
           placeholder="Enter amount"
           className="bg-gray-700 border-gray-600 text-white"
         />
-        {selectedComponent && (
-          <p className="text-sm text-gray-400">
-            Component fee: ₹{selectedComponent.amount}
-          </p>
-        )}
       </div>
 
+      {/* Payment Method */}
       <div className="space-y-2">
         <Label htmlFor="paymentMethod">Payment Method</Label>
-        <Select value={formData.payment_method} onValueChange={(value: any) => handleInputChange('payment_method', value)}>
+        <Select value={formData.payment_method} onValueChange={(value: any) => handleInputChange("payment_method", value)}>
           <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
             <SelectValue />
           </SelectTrigger>
@@ -267,37 +341,63 @@ const PaymentTracking = () => {
         </Select>
       </div>
 
+      {/* Transaction/Cheque Number for non-cash */}
+      {(formData.payment_method === "upi" ||
+        formData.payment_method === "bank_transfer" ||
+        formData.payment_method === "cheque") && (
+        <div className="space-y-2">
+          <Label htmlFor="transactionNo">
+            {formData.payment_method === "cheque" ? "Cheque No." : "Transaction/UTR No."}
+          </Label>
+          <Input
+            id="transactionNo"
+            type="text"
+            value={formData.transaction_ref}
+            onChange={(e) => handleInputChange("transaction_ref", e.target.value)}
+            placeholder={
+              formData.payment_method === "cheque" ? "Enter cheque number" : "Enter transaction/UTR number"
+            }
+            className="bg-gray-700 border-gray-600 text-white"
+          />
+        </div>
+      )}
+
+      {/* Payment Date */}
       <div className="space-y-2">
         <Label htmlFor="paymentDate">Payment Date</Label>
         <Input
           id="paymentDate"
           type="date"
           value={formData.payment_date}
-          onChange={(e) => handleInputChange('payment_date', e.target.value)}
+          onChange={(e) => handleInputChange("payment_date", e.target.value)}
           className="bg-gray-700 border-gray-600 text-white"
         />
       </div>
 
+      {/* Academic Year as input */}
       <div className="space-y-2">
         <Label htmlFor="academicYear">Academic Year</Label>
-        <Select value={formData.academic_year} onValueChange={(value) => handleInputChange('academic_year', value)}>
-          <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="bg-gray-700 border-gray-600">
-            {academicYears.map(year => (
-              <SelectItem key={year} value={year} className="text-white">{year}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Input
+          id="academicYear"
+          type="text"
+          value={formData.academic_year}
+          onChange={(e) => handleInputChange("academic_year", e.target.value)}
+          placeholder="e.g. 2024-25"
+          className="bg-gray-700 border-gray-600 text-white"
+        />
       </div>
 
+      {/* Action Buttons */}
       <div className="flex justify-end space-x-2 mt-6">
-        <Button variant="outline" onClick={() => {
-          setIsAddDialogOpen(false);
-          setIsEditDialogOpen(false);
-          resetForm();
-        }} className="border-gray-600 text-gray-300">
+        <Button
+          variant="outline"
+          onClick={() => {
+            setIsAddDialogOpen(false);
+            setIsEditDialogOpen(false);
+            resetForm();
+          }}
+          className="border-gray-600 text-gray-300"
+        >
           Cancel
         </Button>
         <Button onClick={onSubmit} className="bg-blue-600 hover:bg-blue-700">
