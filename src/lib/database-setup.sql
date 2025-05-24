@@ -33,6 +33,7 @@ CREATE TABLE payments (
   payment_date DATE NOT NULL,
   academic_year VARCHAR(10) NOT NULL,
   receipt_number VARCHAR(50) UNIQUE NOT NULL,
+  transaction_ref VARCHAR(100),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
