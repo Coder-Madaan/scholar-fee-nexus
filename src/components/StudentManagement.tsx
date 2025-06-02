@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,141 @@ import { Plus, Edit, Trash, Download } from 'lucide-react';
 import { studentOperations, Student } from '@/lib/supabase';
 import { exportToExcel } from '@/lib/excelExport';
 import { useToast } from '@/hooks/use-toast';
+
+// Extracted StudentForm component
+const StudentForm = React.memo(({ 
+  formData, 
+  classes, 
+  onInputChange, 
+  onSubmit, 
+  onCancel, 
+  submitText 
+}: { 
+  formData: any;
+  classes: string[];
+  onInputChange: (field: string, value: string) => void;
+  onSubmit: () => void;
+  onCancel: () => void;
+  submitText: string;
+}) => (
+  <div className="space-y-4">
+    <div className="grid grid-cols-2 gap-4">
+      <div className="space-y-2">
+        <Label htmlFor="name">Student Name</Label>
+        <Input
+          id="name"
+          value={formData.name}
+          onChange={(e) => onInputChange('name', e.target.value)}
+          placeholder="Enter student name"
+          className="bg-gray-700 border-gray-600 text-white"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="rollNumber">Roll Number</Label>
+        <Input
+          id="rollNumber"
+          value={formData.roll_number}
+          onChange={(e) => onInputChange('roll_number', e.target.value)}
+          placeholder="Enter roll number"
+          className="bg-gray-700 border-gray-600 text-white"
+        />
+      </div>
+    </div>
+    
+    <div className="grid grid-cols-2 gap-4">
+      <div className="space-y-2">
+        <Label htmlFor="email">Email</Label>
+        <Input
+          id="email"
+          type="email"
+          value={formData.email}
+          onChange={(e) => onInputChange('email', e.target.value)}
+          placeholder="Enter email"
+          className="bg-gray-700 border-gray-600 text-white"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="phone">Phone</Label>
+        <Input
+          id="phone"
+          value={formData.phone}
+          onChange={(e) => onInputChange('phone', e.target.value)}
+          placeholder="Enter phone number"
+          className="bg-gray-700 border-gray-600 text-white"
+        />
+      </div>
+    </div>
+
+    <div className="grid grid-cols-2 gap-4">
+      <div className="space-y-2">
+        <Label htmlFor="class">Class</Label>
+        <Select value={formData.class} onValueChange={(value) => onInputChange('class', value)}>
+          <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+            <SelectValue placeholder="Select Class" />
+          </SelectTrigger>
+          <SelectContent className="bg-gray-700 border-gray-600">
+            {classes.map(cls => (
+              <SelectItem key={cls} value={cls} className="text-white">{cls}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="dateOfBirth">Date of Birth</Label>
+        <Input
+          id="dateOfBirth"
+          type="date"
+          value={formData.date_of_birth}
+          onChange={(e) => onInputChange('date_of_birth', e.target.value)}
+          className="bg-gray-700 border-gray-600 text-white"
+        />
+      </div>
+    </div>
+
+    <div className="grid grid-cols-2 gap-4">
+      <div className="space-y-2">
+        <Label htmlFor="parentName">Parent Name</Label>
+        <Input
+          id="parentName"
+          value={formData.parent_name}
+          onChange={(e) => onInputChange('parent_name', e.target.value)}
+          placeholder="Enter parent name"
+          className="bg-gray-700 border-gray-600 text-white"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="parentPhone">Parent Phone</Label>
+        <Input
+          id="parentPhone"
+          value={formData.parent_phone}
+          onChange={(e) => onInputChange('parent_phone', e.target.value)}
+          placeholder="Enter parent phone"
+          className="bg-gray-700 border-gray-600 text-white"
+        />
+      </div>
+    </div>
+
+    <div className="space-y-2">
+      <Label htmlFor="address">Address</Label>
+      <Input
+        id="address"
+        value={formData.address}
+        onChange={(e) => onInputChange('address', e.target.value)}
+        placeholder="Enter address"
+        className="bg-gray-700 border-gray-600 text-white"
+      />
+    </div>
+
+    <div className="flex justify-end space-x-2 mt-6">
+      <Button variant="outline" onClick={onCancel} className="border-gray-600 text-gray-300">
+        Cancel
+      </Button>
+      <Button onClick={onSubmit} className="bg-blue-600 hover:bg-blue-700">
+        {submitText}
+      </Button>
+    </div>
+  </div>
+));
 
 const StudentManagement = () => {
   const [students, setStudents] = useState<Student[]>([]);
@@ -53,11 +188,11 @@ const StudentManagement = () => {
     }
   };
 
-  const handleInputChange = (field: string, value: string) => {
+  const handleInputChange = useCallback((field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-  };
+  }, []);
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setFormData({
       name: '',
       email: '',
@@ -69,7 +204,7 @@ const StudentManagement = () => {
       address: '',
       date_of_birth: ''
     });
-  };
+  }, []);
 
   const handleAddStudent = async () => {
     try {
@@ -90,7 +225,7 @@ const StudentManagement = () => {
     }
   };
 
-  const handleEditStudent = (student: Student) => {
+  const handleEditStudent = useCallback((student: Student) => {
     setEditingStudent(student);
     setFormData({
       name: student.name,
@@ -104,7 +239,7 @@ const StudentManagement = () => {
       date_of_birth: student.date_of_birth
     });
     setIsEditDialogOpen(true);
-  };
+  }, []);
 
   const handleUpdateStudent = async () => {
     if (!editingStudent) return;
@@ -155,129 +290,11 @@ const StudentManagement = () => {
     });
   };
 
-  const StudentForm = ({ onSubmit, submitText }: { onSubmit: () => void, submitText: string }) => (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="name">Student Name</Label>
-          <Input
-            id="name"
-            value={formData.name}
-            onChange={(e) => handleInputChange('name', e.target.value)}
-            placeholder="Enter student name"
-            className="bg-gray-700 border-gray-600 text-white"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="rollNumber">Roll Number</Label>
-          <Input
-            id="rollNumber"
-            value={formData.roll_number}
-            onChange={(e) => handleInputChange('roll_number', e.target.value)}
-            placeholder="Enter roll number"
-            className="bg-gray-700 border-gray-600 text-white"
-          />
-        </div>
-      </div>
-      
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            type="email"
-            value={formData.email}
-            onChange={(e) => handleInputChange('email', e.target.value)}
-            placeholder="Enter email"
-            className="bg-gray-700 border-gray-600 text-white"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="phone">Phone</Label>
-          <Input
-            id="phone"
-            value={formData.phone}
-            onChange={(e) => handleInputChange('phone', e.target.value)}
-            placeholder="Enter phone number"
-            className="bg-gray-700 border-gray-600 text-white"
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="class">Class</Label>
-          <Select value={formData.class} onValueChange={(value) => handleInputChange('class', value)}>
-            <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
-              <SelectValue placeholder="Select Class" />
-            </SelectTrigger>
-            <SelectContent className="bg-gray-700 border-gray-600">
-              {classes.map(cls => (
-                <SelectItem key={cls} value={cls} className="text-white">{cls}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="dateOfBirth">Date of Birth</Label>
-          <Input
-            id="dateOfBirth"
-            type="date"
-            value={formData.date_of_birth}
-            onChange={(e) => handleInputChange('date_of_birth', e.target.value)}
-            className="bg-gray-700 border-gray-600 text-white"
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="parentName">Parent Name</Label>
-          <Input
-            id="parentName"
-            value={formData.parent_name}
-            onChange={(e) => handleInputChange('parent_name', e.target.value)}
-            placeholder="Enter parent name"
-            className="bg-gray-700 border-gray-600 text-white"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="parentPhone">Parent Phone</Label>
-          <Input
-            id="parentPhone"
-            value={formData.parent_phone}
-            onChange={(e) => handleInputChange('parent_phone', e.target.value)}
-            placeholder="Enter parent phone"
-            className="bg-gray-700 border-gray-600 text-white"
-          />
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="address">Address</Label>
-        <Input
-          id="address"
-          value={formData.address}
-          onChange={(e) => handleInputChange('address', e.target.value)}
-          placeholder="Enter address"
-          className="bg-gray-700 border-gray-600 text-white"
-        />
-      </div>
-
-      <div className="flex justify-end space-x-2 mt-6">
-        <Button variant="outline" onClick={() => {
-          setIsAddDialogOpen(false);
-          setIsEditDialogOpen(false);
-          resetForm();
-        }} className="border-gray-600 text-gray-300">
-          Cancel
-        </Button>
-        <Button onClick={onSubmit} className="bg-blue-600 hover:bg-blue-700">
-          {submitText}
-        </Button>
-      </div>
-    </div>
-  );
+  const handleCancel = useCallback(() => {
+    setIsAddDialogOpen(false);
+    setIsEditDialogOpen(false);
+    resetForm();
+  }, [resetForm]);
 
   if (loading) {
     return (
@@ -309,7 +326,14 @@ const StudentManagement = () => {
                   <DialogHeader>
                     <DialogTitle>Add New Student</DialogTitle>
                   </DialogHeader>
-                  <StudentForm onSubmit={handleAddStudent} submitText="Add Student" />
+                  <StudentForm 
+                    formData={formData}
+                    classes={classes}
+                    onInputChange={handleInputChange}
+                    onSubmit={handleAddStudent}
+                    onCancel={handleCancel}
+                    submitText="Add Student"
+                  />
                 </DialogContent>
               </Dialog>
             </div>
@@ -374,7 +398,14 @@ const StudentManagement = () => {
           <DialogHeader>
             <DialogTitle>Edit Student</DialogTitle>
           </DialogHeader>
-          <StudentForm onSubmit={handleUpdateStudent} submitText="Update Student" />
+          <StudentForm 
+            formData={formData}
+            classes={classes}
+            onInputChange={handleInputChange}
+            onSubmit={handleUpdateStudent}
+            onCancel={handleCancel}
+            submitText="Update Student"
+          />
         </DialogContent>
       </Dialog>
     </div>
