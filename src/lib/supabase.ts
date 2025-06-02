@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
@@ -6,6 +7,23 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 // Database types
+export interface Organization {
+  id: number
+  name: string
+  address?: string
+  phone?: string
+  email?: string
+  created_at: string
+}
+
+export interface UserOrganization {
+  id: number
+  user_id: string
+  organization_id: number
+  role: 'admin' | 'staff'
+  created_at: string
+}
+
 export interface Student {
   id: number
   name: string
@@ -17,6 +35,7 @@ export interface Student {
   parent_phone: string
   address: string
   date_of_birth: string
+  organization_id: number
   created_at: string
 }
 
@@ -26,6 +45,7 @@ export interface FeeComponent {
   class: string
   amount: number
   description: string
+  organization_id: number
   created_at: string
 }
 
@@ -38,26 +58,45 @@ export interface Payment {
   payment_date: string
   academic_year: string
   receipt_number: string
-  transaction_ref?: string | null // Cheque or UTR ref
+  transaction_ref?: string | null
+  organization_id: number
   created_at: string
+}
+
+// Get user's organization
+export const getUserOrganization = async () => {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('User not authenticated')
+  
+  const { data, error } = await supabase
+    .from('user_organizations')
+    .select('organization_id, organizations(*)')
+    .eq('user_id', user.id)
+    .single()
+  
+  if (error) throw error
+  return data
 }
 
 // Student operations
 export const studentOperations = {
   async getAll() {
+    const userOrg = await getUserOrganization()
     const { data, error } = await supabase
       .from('students')
       .select('*')
+      .eq('organization_id', userOrg.organization_id)
       .order('created_at', { ascending: false })
     
     if (error) throw error
     return data
   },
 
-  async create(student: Omit<Student, 'id' | 'created_at'>) {
+  async create(student: Omit<Student, 'id' | 'created_at' | 'organization_id'>) {
+    const userOrg = await getUserOrganization()
     const { data, error } = await supabase
       .from('students')
-      .insert([student])
+      .insert([{ ...student, organization_id: userOrg.organization_id }])
       .select()
       .single()
     
@@ -90,19 +129,22 @@ export const studentOperations = {
 // Fee component operations
 export const feeComponentOperations = {
   async getAll() {
+    const userOrg = await getUserOrganization()
     const { data, error } = await supabase
       .from('fee_components')
       .select('*')
+      .eq('organization_id', userOrg.organization_id)
       .order('created_at', { ascending: false })
     
     if (error) throw error
     return data
   },
 
-  async create(component: Omit<FeeComponent, 'id' | 'created_at'>) {
+  async create(component: Omit<FeeComponent, 'id' | 'created_at' | 'organization_id'>) {
+    const userOrg = await getUserOrganization()
     const { data, error } = await supabase
       .from('fee_components')
-      .insert([component])
+      .insert([{ ...component, organization_id: userOrg.organization_id }])
       .select()
       .single()
     
@@ -135,6 +177,7 @@ export const feeComponentOperations = {
 // Payment operations
 export const paymentOperations = {
   async getAll() {
+    const userOrg = await getUserOrganization()
     const { data, error } = await supabase
       .from('payments')
       .select(`
@@ -142,16 +185,18 @@ export const paymentOperations = {
         students(name, class, roll_number),
         fee_components(name, amount)
       `)
+      .eq('organization_id', userOrg.organization_id)
       .order('created_at', { ascending: false })
     
     if (error) throw error
     return data
   },
 
-  async create(payment: Omit<Payment, 'id' | 'created_at'>) {
+  async create(payment: Omit<Payment, 'id' | 'created_at' | 'organization_id'>) {
+    const userOrg = await getUserOrganization()
     const { data, error } = await supabase
       .from('payments')
-      .insert([payment])
+      .insert([{ ...payment, organization_id: userOrg.organization_id }])
       .select()
       .single()
     
@@ -181,6 +226,7 @@ export const paymentOperations = {
   },
 
   async getByStudent(studentId: number) {
+    const userOrg = await getUserOrganization()
     const { data, error } = await supabase
       .from('payments')
       .select(`
@@ -188,6 +234,7 @@ export const paymentOperations = {
         fee_components(name, amount)
       `)
       .eq('student_id', studentId)
+      .eq('organization_id', userOrg.organization_id)
       .order('created_at', { ascending: false })
     
     if (error) throw error
@@ -198,12 +245,14 @@ export const paymentOperations = {
 // Analytics operations
 export const analyticsOperations = {
   async getClasswiseCollection(period: string = 'month') {
+    const userOrg = await getUserOrganization()
     const { data, error } = await supabase
       .from('payments')
       .select(`
         amount,
         students(class)
       `)
+      .eq('organization_id', userOrg.organization_id)
     
     if (error) throw error
     
@@ -223,12 +272,14 @@ export const analyticsOperations = {
   },
 
   async getFeeComponentCollection() {
+    const userOrg = await getUserOrganization()
     const { data, error } = await supabase
       .from('payments')
       .select(`
         amount,
         fee_components(name)
       `)
+      .eq('organization_id', userOrg.organization_id)
     
     if (error) throw error
     
@@ -249,9 +300,11 @@ export const analyticsOperations = {
   },
 
   async getMonthlyTrend() {
+    const userOrg = await getUserOrganization()
     const { data, error } = await supabase
       .from('payments')
       .select('amount, payment_date')
+      .eq('organization_id', userOrg.organization_id)
     
     if (error) throw error
     
@@ -271,3 +324,37 @@ export const analyticsOperations = {
     }))
   }
 }
+
+// Organization operations
+export const organizationOperations = {
+  async create(name: string, userEmail: string) {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('User not authenticated')
+
+    // Create organization
+    const { data: org, error: orgError } = await supabase
+      .from('organizations')
+      .insert([{ name, email: userEmail }])
+      .select()
+      .single()
+
+    if (orgError) throw orgError
+
+    // Link user to organization
+    const { error: linkError } = await supabase
+      .from('user_organizations')
+      .insert([{
+        user_id: user.id,
+        organization_id: org.id,
+        role: 'admin'
+      }])
+
+    if (linkError) throw linkError
+    return org
+  },
+
+  async getUserOrganization() {
+    return getUserOrganization()
+  }
+}
+
