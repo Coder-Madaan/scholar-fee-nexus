@@ -1,18 +1,85 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Plus, Edit, Trash } from 'lucide-react';
 import { feeComponentOperations, FeeComponent } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
 
+// Extracted ComponentForm
+const ComponentForm = React.memo(({ 
+  formData, 
+  selectedClass,
+  onInputChange, 
+  onSubmit, 
+  onCancel, 
+  submitText 
+}: { 
+  formData: any;
+  selectedClass: string;
+  onInputChange: (field: string, value: string) => void;
+  onSubmit: () => void;
+  onCancel: () => void;
+  submitText: string;
+}) => (
+  <div className="space-y-4">
+    <div className="space-y-2">
+      <Label htmlFor="componentName">Component Name</Label>
+      <Input
+        id="componentName"
+        value={formData.name}
+        onChange={(e) => onInputChange('name', e.target.value)}
+        placeholder="e.g., Tuition Fee, Transport Fee"
+        className="bg-gray-700 border-gray-600 text-white"
+      />
+    </div>
+    <div className="space-y-2">
+      <Label>Class</Label>
+      <Input
+        value={selectedClass}
+        readOnly
+        className="bg-gray-600 border-gray-500 text-white"
+      />
+    </div>
+    <div className="space-y-2">
+      <Label htmlFor="amount">Amount (₹)</Label>
+      <Input
+        id="amount"
+        type="number"
+        value={formData.amount}
+        onChange={(e) => onInputChange('amount', e.target.value)}
+        placeholder="Enter amount"
+        className="bg-gray-700 border-gray-600 text-white"
+      />
+    </div>
+    <div className="space-y-2">
+      <Label htmlFor="description">Description</Label>
+      <Input
+        id="description"
+        value={formData.description}
+        onChange={(e) => onInputChange('description', e.target.value)}
+        placeholder="Brief description"
+        className="bg-gray-700 border-gray-600 text-white"
+      />
+    </div>
+    <div className="flex justify-end space-x-2 mt-6">
+      <Button variant="outline" onClick={onCancel} className="border-gray-600 text-gray-300">
+        Cancel
+      </Button>
+      <Button onClick={onSubmit} className="bg-blue-600 hover:bg-blue-700">
+        {submitText}
+      </Button>
+    </div>
+  </div>
+));
+
 const FeeComponentManagement = () => {
   const [feeComponents, setFeeComponents] = useState<FeeComponent[]>([]);
+  const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingComponent, setEditingComponent] = useState<FeeComponent | null>(null);
@@ -21,7 +88,6 @@ const FeeComponentManagement = () => {
 
   const [formData, setFormData] = useState({
     name: '',
-    class: '',
     amount: '',
     description: ''
   });
@@ -48,18 +114,38 @@ const FeeComponentManagement = () => {
     }
   };
 
-  const handleInputChange = (field: string, value: string) => {
+  const handleInputChange = useCallback((field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-  };
+  }, []);
 
-  const resetForm = () => {
-    setFormData({ name: '', class: '', amount: '', description: '' });
+  const resetForm = useCallback(() => {
+    setFormData({ name: '', amount: '', description: '' });
+  }, []);
+
+  const checkNameUniqueness = (name: string, classValue: string, excludeId?: number) => {
+    return !feeComponents.some(component => 
+      component.name.toLowerCase() === name.toLowerCase() && 
+      component.class === classValue &&
+      component.id !== excludeId
+    );
   };
 
   const handleAddFeeComponent = async () => {
+    if (!selectedClass) return;
+
+    if (!checkNameUniqueness(formData.name, selectedClass)) {
+      toast({
+        title: "Error",
+        description: `A fee component with name "${formData.name}" already exists for ${selectedClass}`,
+        variant: "destructive"
+      });
+      return;
+    }
+
     try {
       await feeComponentOperations.create({
         ...formData,
+        class: selectedClass,
         amount: parseInt(formData.amount)
       });
       await loadFeeComponents();
@@ -78,20 +164,28 @@ const FeeComponentManagement = () => {
     }
   };
 
-  const handleEditComponent = (component: FeeComponent) => {
+  const handleEditComponent = useCallback((component: FeeComponent) => {
     setEditingComponent(component);
     setFormData({
       name: component.name,
-      class: component.class,
       amount: component.amount.toString(),
       description: component.description
     });
     setIsEditDialogOpen(true);
-  };
+  }, []);
 
   const handleUpdateComponent = async () => {
     if (!editingComponent) return;
     
+    if (!checkNameUniqueness(formData.name, editingComponent.class, editingComponent.id)) {
+      toast({
+        title: "Error",
+        description: `A fee component with name "${formData.name}" already exists for ${editingComponent.class}`,
+        variant: "destructive"
+      });
+      return;
+    }
+
     try {
       await feeComponentOperations.update(editingComponent.id, {
         ...formData,
@@ -133,66 +227,15 @@ const FeeComponentManagement = () => {
     }
   };
 
-  const ComponentForm = ({ onSubmit, submitText }: { onSubmit: () => void, submitText: string }) => (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="componentName">Component Name</Label>
-        <Input
-          id="componentName"
-          value={formData.name}
-          onChange={(e) => handleInputChange('name', e.target.value)}
-          placeholder="e.g., Tuition Fee, Transport Fee"
-          className="bg-gray-700 border-gray-600 text-white"
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="class">Class</Label>
-        <Select value={formData.class} onValueChange={(value) => handleInputChange('class', value)}>
-          <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
-            <SelectValue placeholder="Select Class" />
-          </SelectTrigger>
-          <SelectContent className="bg-gray-700 border-gray-600">
-            {classes.map(cls => (
-              <SelectItem key={cls} value={cls} className="text-white">{cls}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="amount">Amount (₹)</Label>
-        <Input
-          id="amount"
-          type="number"
-          value={formData.amount}
-          onChange={(e) => handleInputChange('amount', e.target.value)}
-          placeholder="Enter amount"
-          className="bg-gray-700 border-gray-600 text-white"
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="description">Description</Label>
-        <Input
-          id="description"
-          value={formData.description}
-          onChange={(e) => handleInputChange('description', e.target.value)}
-          placeholder="Brief description"
-          className="bg-gray-700 border-gray-600 text-white"
-        />
-      </div>
-      <div className="flex justify-end space-x-2 mt-6">
-        <Button variant="outline" onClick={() => {
-          setIsAddDialogOpen(false);
-          setIsEditDialogOpen(false);
-          resetForm();
-        }} className="border-gray-600 text-gray-300">
-          Cancel
-        </Button>
-        <Button onClick={onSubmit} className="bg-blue-600 hover:bg-blue-700">
-          {submitText}
-        </Button>
-      </div>
-    </div>
-  );
+  const handleCancel = useCallback(() => {
+    setIsAddDialogOpen(false);
+    setIsEditDialogOpen(false);
+    resetForm();
+  }, [resetForm]);
+
+  const filteredComponents = selectedClass 
+    ? feeComponents.filter(component => component.class === selectedClass)
+    : [];
 
   if (loading) {
     return (
@@ -202,12 +245,49 @@ const FeeComponentManagement = () => {
     );
   }
 
+  // Class selection view
+  if (!selectedClass) {
+    return (
+      <div className="space-y-6">
+        <Card className="bg-gray-800 border-gray-700">
+          <CardHeader>
+            <CardTitle className="text-white">Fee Component Management</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-gray-300 mb-4">Select a class to manage fee components:</div>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              {classes.map((cls) => (
+                <Button
+                  key={cls}
+                  onClick={() => setSelectedClass(cls)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white h-12"
+                >
+                  {cls}
+                </Button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Class-specific component management view
   return (
     <div className="space-y-6">
       <Card className="bg-gray-800 border-gray-700">
         <CardHeader>
           <div className="flex justify-between items-center">
-            <CardTitle className="text-white">Fee Component Management</CardTitle>
+            <div>
+              <CardTitle className="text-white">Fee Components for {selectedClass}</CardTitle>
+              <Button 
+                variant="outline" 
+                onClick={() => setSelectedClass(null)}
+                className="border-gray-600 text-gray-300 mt-2"
+              >
+                ← Back to Classes
+              </Button>
+            </div>
             <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
               <DialogTrigger asChild>
                 <Button className="bg-blue-600 hover:bg-blue-700">
@@ -217,9 +297,16 @@ const FeeComponentManagement = () => {
               </DialogTrigger>
               <DialogContent className="bg-gray-800 border-gray-700 text-white">
                 <DialogHeader>
-                  <DialogTitle>Add New Fee Component</DialogTitle>
+                  <DialogTitle>Add New Fee Component for {selectedClass}</DialogTitle>
                 </DialogHeader>
-                <ComponentForm onSubmit={handleAddFeeComponent} submitText="Add Component" />
+                <ComponentForm 
+                  formData={formData}
+                  selectedClass={selectedClass}
+                  onInputChange={handleInputChange}
+                  onSubmit={handleAddFeeComponent}
+                  onCancel={handleCancel}
+                  submitText="Add Component"
+                />
               </DialogContent>
             </Dialog>
           </div>
@@ -230,41 +317,47 @@ const FeeComponentManagement = () => {
               <TableHeader>
                 <TableRow className="border-gray-700">
                   <TableHead className="text-gray-300">Component Name</TableHead>
-                  <TableHead className="text-gray-300">Class</TableHead>
                   <TableHead className="text-gray-300">Amount (₹)</TableHead>
                   <TableHead className="text-gray-300">Description</TableHead>
                   <TableHead className="text-gray-300">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {feeComponents.map((component) => (
-                  <TableRow key={component.id} className="border-gray-700">
-                    <TableCell className="text-white font-medium">{component.name}</TableCell>
-                    <TableCell className="text-white">{component.class}</TableCell>
-                    <TableCell className="text-white">₹{component.amount.toLocaleString()}</TableCell>
-                    <TableCell className="text-white">{component.description}</TableCell>
-                    <TableCell>
-                      <div className="flex space-x-2">
-                        <Button 
-                          size="sm" 
-                          variant="outline" 
-                          className="border-gray-600 text-gray-300"
-                          onClick={() => handleEditComponent(component)}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          variant="outline" 
-                          className="border-red-600 text-red-400"
-                          onClick={() => handleDelete(component.id)}
-                        >
-                          <Trash className="w-4 h-4" />
-                        </Button>
-                      </div>
+                {filteredComponents.length === 0 ? (
+                  <TableRow className="border-gray-700">
+                    <TableCell colSpan={4} className="text-center text-gray-400 py-8">
+                      No fee components found for {selectedClass}. Add one to get started.
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  filteredComponents.map((component) => (
+                    <TableRow key={component.id} className="border-gray-700">
+                      <TableCell className="text-white font-medium">{component.name}</TableCell>
+                      <TableCell className="text-white">₹{component.amount.toLocaleString()}</TableCell>
+                      <TableCell className="text-white">{component.description}</TableCell>
+                      <TableCell>
+                        <div className="flex space-x-2">
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            className="border-gray-600 text-gray-300"
+                            onClick={() => handleEditComponent(component)}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            className="border-red-600 text-red-400"
+                            onClick={() => handleDelete(component.id)}
+                          >
+                            <Trash className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </div>
@@ -277,7 +370,14 @@ const FeeComponentManagement = () => {
           <DialogHeader>
             <DialogTitle>Edit Fee Component</DialogTitle>
           </DialogHeader>
-          <ComponentForm onSubmit={handleUpdateComponent} submitText="Update Component" />
+          <ComponentForm 
+            formData={formData}
+            selectedClass={editingComponent?.class || ''}
+            onInputChange={handleInputChange}
+            onSubmit={handleUpdateComponent}
+            onCancel={handleCancel}
+            submitText="Update Component"
+          />
         </DialogContent>
       </Dialog>
     </div>
