@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -69,6 +68,36 @@ const ReportsAnalytics = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Custom formatter for numbers to handle varying sizes
+  const formatAmount = (amount: number) => {
+    if (amount >= 10000000) { // 1 crore+
+      return `₹${(amount / 10000000).toFixed(1)}Cr`;
+    } else if (amount >= 100000) { // 1 lakh+
+      return `₹${(amount / 100000).toFixed(1)}L`;
+    } else if (amount >= 1000) { // 1 thousand+
+      return `₹${(amount / 1000).toFixed(1)}K`;
+    } else {
+      return `₹${amount.toLocaleString()}`;
+    }
+  };
+
+  // Custom tooltip formatter for charts
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-gray-800 border border-gray-600 p-3 rounded-lg shadow-lg">
+          <p className="text-gray-300">{`${label}`}</p>
+          {payload.map((entry: any, index: number) => (
+            <p key={index} style={{ color: entry.color }}>
+              {`${entry.dataKey === 'collection' ? 'Collection' : 'Target'}: ₹${entry.value.toLocaleString()}`}
+            </p>
+          ))}
+        </div>
+      );
+    }
+    return null;
   };
 
   const exportData = async (type: string) => {
@@ -186,7 +215,7 @@ const ReportsAnalytics = () => {
             <div className="flex items-center">
               <div className="flex-1">
                 <p className="text-gray-400 text-sm">Total Collection</p>
-                <p className="text-2xl font-bold text-white">₹{summary.totalCollection.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-white">{formatAmount(summary.totalCollection)}</p>
                 <p className="text-green-400 text-sm">Real-time data</p>
               </div>
               <DollarSign className="h-8 w-8 text-green-400" />
@@ -225,7 +254,7 @@ const ReportsAnalytics = () => {
             <div className="flex items-center">
               <div className="flex-1">
                 <p className="text-gray-400 text-sm">Pending Amount</p>
-                <p className="text-2xl font-bold text-white">₹{summary.pendingAmount.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-white">{formatAmount(summary.pendingAmount)}</p>
                 <p className="text-red-400 text-sm">{summary.totalStudents - summary.paidStudents} students</p>
               </div>
               <Calendar className="h-8 w-8 text-red-400" />
@@ -246,9 +275,13 @@ const ReportsAnalytics = () => {
               <BarChart data={classWiseData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                 <XAxis dataKey="class" stroke="#9CA3AF" />
-                <YAxis stroke="#9CA3AF" />
+                <YAxis 
+                  stroke="#9CA3AF" 
+                  tickFormatter={formatAmount}
+                  width={60}
+                />
                 <Tooltip 
-                  contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', color: 'white' }}
+                  content={CustomTooltip}
                 />
                 <Bar dataKey="collection" fill="#3B82F6" />
               </BarChart>
@@ -279,7 +312,7 @@ const ReportsAnalytics = () => {
                   ))}
                 </Pie>
                 <Tooltip 
-                  contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', color: 'white' }}
+                  content={CustomTooltip}
                 />
               </PieChart>
             </ResponsiveContainer>
@@ -297,9 +330,13 @@ const ReportsAnalytics = () => {
             <LineChart data={monthlyTrend}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
               <XAxis dataKey="month" stroke="#9CA3AF" />
-              <YAxis stroke="#9CA3AF" />
+              <YAxis 
+                stroke="#9CA3AF" 
+                tickFormatter={formatAmount}
+                width={60}
+              />
               <Tooltip 
-                contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', color: 'white' }}
+                content={CustomTooltip}
               />
               <Line type="monotone" dataKey="collection" stroke="#3B82F6" strokeWidth={2} />
               <Line type="monotone" dataKey="target" stroke="#10B981" strokeWidth={2} strokeDasharray="5 5" />

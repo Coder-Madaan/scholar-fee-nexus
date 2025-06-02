@@ -1,14 +1,13 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Users, DollarSign, FileText, Download, Plus } from 'lucide-react';
+import { Users, DollarSign, FileText, Download, Plus, LogOut } from 'lucide-react';
 import StudentManagement from '@/components/StudentManagement';
 import FeeComponentManagement from '@/components/FeeComponentManagement';
 import PaymentTracking from '@/components/PaymentTracking';
 import ReportsAnalytics from '@/components/ReportsAnalytics';
-import { studentOperations, paymentOperations } from '@/lib/supabase';
+import { studentOperations, paymentOperations, supabase } from '@/lib/supabase';
 import { exportToExcel } from '@/lib/excelExport';
 import { useToast } from '@/hooks/use-toast';
 
@@ -68,6 +67,19 @@ const Dashboard = () => {
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      // The auth state change will be handled by App.tsx
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to logout",
+        variant: "destructive"
+      });
+    }
+  };
+
   const handleExportAllData = async () => {
     try {
       const [students, payments] = await Promise.all([
@@ -101,10 +113,16 @@ const Dashboard = () => {
             <h1 className="text-3xl font-bold mb-2">School Fee Management System</h1>
             <p className="text-gray-400">Manage student fees, payments, and generate reports</p>
           </div>
-          <Button onClick={handleExportAllData} className="bg-blue-600 hover:bg-blue-700">
-            <Download className="w-4 h-4 mr-2" />
-            Export All Data
-          </Button>
+          <div className="flex gap-3">
+            <Button onClick={handleExportAllData} className="bg-blue-600 hover:bg-blue-700">
+              <Download className="w-4 h-4 mr-2" />
+              Export All Data
+            </Button>
+            <Button onClick={handleLogout} variant="outline" className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white">
+              <LogOut className="w-4 h-4 mr-2" />
+              Logout
+            </Button>
+          </div>
         </div>
 
         {/* Stats Cards */}
