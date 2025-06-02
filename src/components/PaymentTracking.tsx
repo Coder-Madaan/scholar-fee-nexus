@@ -81,9 +81,12 @@ const PaymentTracking = () => {
     }
   };
 
+  // Updated receipt number generation to ensure uniqueness
   const generateReceiptNumber = () => {
-    const timestamp = Date.now();
-    return `REC${timestamp}`;
+    const now = new Date();
+    const timestamp = now.getTime();
+    const randomSuffix = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    return `REC${timestamp}${randomSuffix}`;
   };
 
   // --- SEARCH: Filtered student list by search term ---
@@ -199,38 +202,37 @@ const PaymentTracking = () => {
       }
 
       const amountPerComponent = Math.round(totalAmount / (componentIds.length || 1));
-      const receiptNumber = generateReceiptNumber();
 
-      // Only use strictly the fields needed by DB
-      await Promise.all(
-        componentIds.map((componentId) =>
-          paymentOperations.create({
-            student_id: studentIdNum,
-            fee_component_id: componentId ? parseInt(componentId) : null,
-            amount: amountPerComponent,
-            payment_method: paymentMethod,
-            payment_date: formData.payment_date,
-            academic_year: formData.academic_year,
-            receipt_number: receiptNumber,
-            transaction_ref: needsRef ? transactionRefField : "",
-          })
-        )
-      );
+      // Create payments with unique receipt numbers for each component
+      const paymentPromises = componentIds.map((componentId) => {
+        const uniqueReceiptNumber = generateReceiptNumber();
+        return paymentOperations.create({
+          student_id: studentIdNum,
+          fee_component_id: componentId ? parseInt(componentId) : null,
+          amount: amountPerComponent,
+          payment_method: paymentMethod,
+          payment_date: formData.payment_date,
+          academic_year: formData.academic_year,
+          receipt_number: uniqueReceiptNumber,
+          transaction_ref: needsRef ? transactionRefField : "",
+        });
+      });
+
+      await Promise.all(paymentPromises);
       await loadData();
       resetForm();
       setIsAddDialogOpen(false);
       toast({
         title: "Success",
-        description: `Payment recorded successfully. Receipt: ${receiptNumber}`,
+        description: `Payment recorded successfully with ${componentIds.length} receipt(s)`,
       });
     } catch (error) {
+      console.error('Payment creation error:', error);
       toast({
         title: "Error",
         description: "Failed to record payment. Please check the details or contact admin.",
         variant: "destructive"
       });
-      // Optional: log details for debug
-      console.error(error);
     }
   };
 
