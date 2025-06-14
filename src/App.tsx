@@ -18,40 +18,62 @@ const App = () => {
   const [session, setSession] = useState<any>(null);
   const [needsOrgSetup, setNeedsOrgSetup] = useState(false);
 
+  const checkUserOrganization = async (user: any) => {
+    if (!user) return;
+    
+    try {
+      console.log('Checking user organization for:', user.email);
+      const orgData = await organizationOperations.getUserOrganization();
+      console.log('Organization found:', orgData);
+      setNeedsOrgSetup(false);
+    } catch (error) {
+      console.log('No organization found, needs setup:', error);
+      setNeedsOrgSetup(true);
+    }
+  };
+
   useEffect(() => {
+    // Get initial session
+    const getInitialSession = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) {
+          console.error('Error getting session:', error);
+          setLoading(false);
+          return;
+        }
+        
+        console.log('Initial session:', session?.user?.email);
+        setSession(session);
+        
+        if (session?.user) {
+          await checkUserOrganization(session.user);
+        }
+        
+        setLoading(false);
+      } catch (error) {
+        console.error('Error in getInitialSession:', error);
+        setLoading(false);
+      }
+    };
+
+    // Set up auth state listener
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event, session?.user?.email);
       setSession(session);
       
-      if (session?.user) {
-        // Check if user has an organization
-        try {
-          await organizationOperations.getUserOrganization();
-          setNeedsOrgSetup(false);
-        } catch (error) {
-          setNeedsOrgSetup(true);
-        }
+      if (session?.user && event === 'SIGNED_IN') {
+        await checkUserOrganization(session.user);
+      } else if (!session) {
+        setNeedsOrgSetup(false);
       }
       
       setLoading(false);
     });
 
-    // Check if already logged in on mount
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
-      
-      if (session?.user) {
-        try {
-          await organizationOperations.getUserOrganization();
-          setNeedsOrgSetup(false);
-        } catch (error) {
-          setNeedsOrgSetup(true);
-        }
-      }
-      
-      setLoading(false);
-    });
+    getInitialSession();
 
     return () => {
       subscription.unsubscribe();
@@ -59,11 +81,31 @@ const App = () => {
   }, []);
 
   const handleOrgSetupComplete = async () => {
+    console.log('Organization setup completed');
     setNeedsOrgSetup(false);
+    
     // Refresh the session to ensure everything is updated
-    const { data: { session } } = await supabase.auth.getSession();
-    setSession(session);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      setSession(session);
+    } catch (error) {
+      console.error('Error refreshing session:', error);
+    }
   };
+
+  const handleAuthSuccess = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      setSession(session);
+      if (session?.user) {
+        await checkUserOrganization(session.user);
+      }
+    } catch (error) {
+      console.error('Error in handleAuthSuccess:', error);
+    }
+  };
+
+  console.log('App state:', { loading, session: !!session, needsOrgSetup });
 
   if (loading) {
     return (
@@ -74,9 +116,7 @@ const App = () => {
   }
 
   if (!session) {
-    return <Auth onAuthSuccess={() => {
-      supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
-    }} />;
+    return <Auth onAuthSuccess={handleAuthSuccess} />;
   }
 
   if (needsOrgSetup) {
@@ -96,7 +136,6 @@ const App = () => {
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
@@ -106,4 +145,3 @@ const App = () => {
 };
 
 export default App;
-

@@ -74,7 +74,10 @@ export const getUserOrganization = async () => {
     .eq('user_id', user.id)
     .single()
   
-  if (error) throw error
+  if (error) {
+    console.error('Error getting user organization:', error);
+    throw error;
+  }
   return data
 }
 
@@ -331,6 +334,8 @@ export const organizationOperations = {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('User not authenticated')
 
+    console.log('Creating organization:', name, 'for user:', userEmail);
+
     // Create organization
     const { data: org, error: orgError } = await supabase
       .from('organizations')
@@ -338,7 +343,12 @@ export const organizationOperations = {
       .select()
       .single()
 
-    if (orgError) throw orgError
+    if (orgError) {
+      console.error('Error creating organization:', orgError);
+      throw orgError;
+    }
+
+    console.log('Organization created:', org);
 
     // Link user to organization
     const { error: linkError } = await supabase
@@ -349,7 +359,12 @@ export const organizationOperations = {
         role: 'admin'
       }])
 
-    if (linkError) throw linkError
+    if (linkError) {
+      console.error('Error linking user to organization:', linkError);
+      throw linkError;
+    }
+
+    console.log('User linked to organization successfully');
     return org
   },
 
@@ -357,4 +372,3 @@ export const organizationOperations = {
     return getUserOrganization()
   }
 }
-
