@@ -1,5 +1,6 @@
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { Provider } from 'react-redux';
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -9,103 +10,52 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Auth from "@/components/Auth";
 import OrganizationSetup from "@/components/OrganizationSetup";
-import { supabase, organizationOperations } from "@/lib/supabase";
+import { store } from "@/store/store";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { initializeAuth, setSession, clearAuth, createOrganization } from "@/store/authSlice";
+import { supabase } from "@/lib/supabase";
 
 const queryClient = new QueryClient();
 
-const App = () => {
-  const [loading, setLoading] = useState(true);
-  const [session, setSession] = useState<any>(null);
-  const [needsOrgSetup, setNeedsOrgSetup] = useState(false);
-
-  const checkUserOrganization = async (user: any) => {
-    if (!user) return;
-    
-    try {
-      console.log('Checking user organization for:', user.email);
-      const orgData = await organizationOperations.getUserOrganization();
-      console.log('Organization found:', orgData);
-      setNeedsOrgSetup(false);
-    } catch (error) {
-      console.log('No organization found, needs setup:', error);
-      setNeedsOrgSetup(true);
-    }
-  };
+const AppContent = () => {
+  const dispatch = useAppDispatch();
+  const { user, loading, needsOrgSetup, error } = useAppSelector((state) => state.auth);
 
   useEffect(() => {
-    // Get initial session
-    const getInitialSession = async () => {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (error) {
-          console.error('Error getting session:', error);
-          setLoading(false);
-          return;
-        }
-        
-        console.log('Initial session:', session?.user?.email);
-        setSession(session);
-        
-        if (session?.user) {
-          await checkUserOrganization(session.user);
-        }
-        
-        setLoading(false);
-      } catch (error) {
-        console.error('Error in getInitialSession:', error);
-        setLoading(false);
-      }
-    };
+    // Initialize auth state
+    dispatch(initializeAuth());
 
     // Set up auth state listener
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('Auth state changed:', event, session?.user?.email);
-      setSession(session);
       
-      if (session?.user && event === 'SIGNED_IN') {
-        await checkUserOrganization(session.user);
-      } else if (!session) {
-        setNeedsOrgSetup(false);
+      if (session) {
+        dispatch(setSession(session));
+        // Re-initialize to check organization status
+        dispatch(initializeAuth());
+      } else {
+        dispatch(clearAuth());
       }
-      
-      setLoading(false);
     });
-
-    getInitialSession();
 
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [dispatch]);
 
-  const handleOrgSetupComplete = async () => {
-    console.log('Organization setup completed');
-    setNeedsOrgSetup(false);
-    
-    // Refresh the session to ensure everything is updated
+  const handleOrgSetupComplete = async (name: string, userEmail: string) => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      setSession(session);
+      await dispatch(createOrganization({ name, userEmail })).unwrap();
     } catch (error) {
-      console.error('Error refreshing session:', error);
+      console.error('Organization setup failed:', error);
     }
   };
 
-  const handleAuthSuccess = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      setSession(session);
-      if (session?.user) {
-        await checkUserOrganization(session.user);
-      }
-    } catch (error) {
-      console.error('Error in handleAuthSuccess:', error);
-    }
+  const handleAuthSuccess = () => {
+    dispatch(initializeAuth());
   };
-
-  console.log('App state:', { loading, session: !!session, needsOrgSetup });
 
   if (loading) {
     return (
@@ -115,14 +65,14 @@ const App = () => {
     );
   }
 
-  if (!session) {
+  if (!user) {
     return <Auth onAuthSuccess={handleAuthSuccess} />;
   }
 
   if (needsOrgSetup) {
     return (
       <OrganizationSetup 
-        userEmail={session.user.email || ''} 
+        userEmail={user.email || ''} 
         onSetupComplete={handleOrgSetupComplete}
       />
     );
@@ -141,6 +91,14 @@ const App = () => {
         </BrowserRouter>
       </TooltipProvider>
     </QueryClientProvider>
+  );
+};
+
+const App = () => {
+  return (
+    <Provider store={store}>
+      <AppContent />
+    </Provider>
   );
 };
 

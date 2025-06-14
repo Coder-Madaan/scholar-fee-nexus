@@ -4,12 +4,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { organizationOperations } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
 
 interface OrganizationSetupProps {
   userEmail: string;
-  onSetupComplete: () => void;
+  onSetupComplete: (name: string, userEmail: string) => Promise<void>;
 }
 
 const OrganizationSetup = ({ userEmail, onSetupComplete }: OrganizationSetupProps) => {
@@ -23,12 +22,11 @@ const OrganizationSetup = ({ userEmail, onSetupComplete }: OrganizationSetupProp
 
     setLoading(true);
     try {
-      await organizationOperations.create(schoolName.trim(), userEmail);
+      await onSetupComplete(schoolName.trim(), userEmail);
       toast({
         title: "Success",
         description: "School setup completed successfully!"
       });
-      onSetupComplete();
     } catch (error) {
       console.error('Setup error:', error);
       toast({
@@ -77,4 +75,3 @@ const OrganizationSetup = ({ userEmail, onSetupComplete }: OrganizationSetupProp
 };
 
 export default OrganizationSetup;
-
