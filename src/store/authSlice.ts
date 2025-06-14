@@ -45,7 +45,7 @@ export const initializeAuth = createAsyncThunk(
         organization,
         needsOrgSetup
       };
-    } catch (error) {
+    } catch (error: any) {
       return rejectWithValue(error.message);
     }
   }
@@ -57,7 +57,7 @@ export const createOrganization = createAsyncThunk(
     try {
       const organization = await organizationOperations.create(name, userEmail);
       return organization;
-    } catch (error) {
+    } catch (error: any) {
       return rejectWithValue(error.message);
     }
   }
